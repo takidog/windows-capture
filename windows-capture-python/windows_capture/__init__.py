@@ -1,6 +1,6 @@
 """Fastest Windows Screen Capture Library For Python 🔥."""
 
-from .windows_capture import NativeWindowsCapture, NativeCaptureControl
+from .windows_capture import NativeWindowsCapture, NativeCaptureControl, capture_window_by_hwnd
 import ctypes
 import numpy
 import cv2
@@ -166,6 +166,7 @@ class WindowsCapture:
         draw_border: Optional[bool] = None,
         monitor_index: Optional[int] = None,
         window_name: Optional[str] = None,
+        hwnd: Optional[int] = None,  # 新增
     ) -> None:
         """
         Constructs All The Necessary Attributes For The WindowsCapture Object
@@ -186,25 +187,38 @@ class WindowsCapture:
         if window_name is not None:
             monitor_index = None
 
+        self.hwnd = hwnd
         self.frame_handler: Optional[types.FunctionType] = None
         self.closed_handler: Optional[types.FunctionType] = None
-        self.capture = NativeWindowsCapture(
-            self.on_frame_arrived,
-            self.on_closed,
-            cursor_capture,
-            draw_border,
-            monitor_index,
-            window_name,
-        )
+        if hwnd is not None:
+            self.capture = None
+        else:
+            self.capture = NativeWindowsCapture(
+                self.on_frame_arrived,
+                self.on_closed,
+                cursor_capture,
+                draw_border,
+                monitor_index,
+                window_name,
+            )
 
     def start(self) -> None:
         """Starts The Capture Thread"""
-        if self.frame_handler is None:
-            raise Exception("on_frame_arrived Event Handler Is Not Set")
-        elif self.closed_handler is None:
-            raise Exception("on_closed Event Handler Is Not Set")
+        if self.hwnd is not None:
+            return capture_window_by_hwnd(
+                self.hwnd,
+                self.on_frame_arrived,
+                self.on_closed,
+                cursor_capture=self.capture.cursor_capture if self.capture else True,
+                draw_border=self.capture.draw_border if self.capture else None,
+            )
+        else:
+            if self.frame_handler is None:
+                raise Exception("on_frame_arrived Event Handler Is Not Set")
+            elif self.closed_handler is None:
+                raise Exception("on_closed Event Handler Is Not Set")
 
-        self.capture.start()
+            self.capture.start()
 
     def start_free_threaded(self) -> CaptureControl:
         """Starts The Capture Thread On A Dedicated Thread"""

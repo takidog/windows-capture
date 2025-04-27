@@ -23,8 +23,48 @@ use pyo3::{exceptions::PyException, prelude::*, types::PyList};
 fn windows_capture(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeWindowsCapture>()?;
     m.add_class::<NativeCaptureControl>()?;
+    // 註冊 HWND 版本的自由函式
+    m.add_function(wrap_pyfunction!(capture_window_by_hwnd, m)?)?;
     Ok(())
 }
+
+#[pyfunction]
+pub fn capture_window_by_hwnd(
+    hwnd: usize,
+    on_frame_arrived_callback: PyObject,
+    on_closed: PyObject,
+    cursor_capture: Option<bool>,
+    draw_border: Option<bool>,
+) -> PyResult<()> {
+    let window = Window::from_raw_hwnd(hwnd as *mut std::ffi::c_void);
+    let cursor_capture = match cursor_capture {
+        Some(true) => CursorCaptureSettings::WithCursor,
+        Some(false) => CursorCaptureSettings::WithoutCursor,
+        None => CursorCaptureSettings::Default,
+    };
+    let draw_border = match draw_border {
+        Some(true) => DrawBorderSettings::WithBorder,
+        Some(false) => DrawBorderSettings::WithoutBorder,
+        None => DrawBorderSettings::Default,
+    };
+    let settings = Settings::new(
+        window,
+        cursor_capture,
+        draw_border,
+        ColorFormat::Bgra8,
+        (
+            Arc::new(on_frame_arrived_callback),
+            Arc::new(on_closed),
+        ),
+    );
+    match InnerNativeWindowsCapture::start(settings) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(PyException::new_err(format!(
+            "InnerNativeWindowsCapture::start Threw An Exception -> {e}",
+        ))),
+    }
+}
+
 
 /// Internal Struct Used To Handle Free Threaded Start
 #[pyclass]
@@ -135,6 +175,45 @@ pub struct NativeWindowsCapture {
 
 #[pymethods]
 impl NativeWindowsCapture {
+    /// Capture window by HWND (from Python, pass int/long)
+    #[staticmethod]
+    #[pyo3(name = "capture_window_by_hwnd")]
+    pub fn capture_window_by_hwnd(
+        _py: Python,
+        hwnd: usize,
+        on_frame_arrived_callback: PyObject,
+        on_closed: PyObject,
+        cursor_capture: Option<bool>,
+        draw_border: Option<bool>,
+    ) -> PyResult<()> {
+        let window = Window::from_raw_hwnd(hwnd as *mut std::ffi::c_void);
+        let cursor_capture = match cursor_capture {
+            Some(true) => CursorCaptureSettings::WithCursor,
+            Some(false) => CursorCaptureSettings::WithoutCursor,
+            None => CursorCaptureSettings::Default,
+        };
+        let draw_border = match draw_border {
+            Some(true) => DrawBorderSettings::WithBorder,
+            Some(false) => DrawBorderSettings::WithoutBorder,
+            None => DrawBorderSettings::Default,
+        };
+        let settings = Settings::new(
+            window,
+            cursor_capture,
+            draw_border,
+            ColorFormat::Bgra8,
+            (
+                Arc::new(on_frame_arrived_callback),
+                Arc::new(on_closed),
+            ),
+        );
+        match InnerNativeWindowsCapture::start(settings) {
+            Ok(()) => Ok(()),
+            Err(e) => Err(PyException::new_err(format!(
+                "InnerNativeWindowsCapture::start Threw An Exception -> {e}",
+            ))),
+        }
+    }
     #[new]
     #[pyo3(signature = (on_frame_arrived_callback, on_closed, cursor_capture=None, draw_border=None, monitor_index=None, window_name=None))]
     #[inline]
